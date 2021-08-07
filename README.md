@@ -1,4 +1,4 @@
-# ToyProject-Board-App  ✏✍📝🖊
+# ToyProject-Board-App  📝🖊
 ## 🖥 Project Summary
 - 게시판 기능을 구현했습니다.
 
