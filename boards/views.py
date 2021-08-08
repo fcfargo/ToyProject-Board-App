@@ -1,4 +1,3 @@
-from django               import views
 import bcrypt
 import json
 
@@ -23,7 +22,7 @@ class BoardwriteView(View):
             title             = data['title']
             content           = data['content'] 
             password          = data['password']
-            tag_names         = data['tag_names']
+            tag_names         = data.get('tag_names')
             ip_address        = self.get_client_ip(request)
             # file              = request.FILES.get('filename') ## 파일 첨부는 추가 기능으로 구현
 
@@ -41,7 +40,6 @@ class BoardwriteView(View):
 
                 if tag_names:        
                     for tag_name in tag_names.replace(" ","").split(','):
-
                         tag, is_created = Tag.objects.get_or_create(
                             name=tag_name
                         )
@@ -60,6 +58,62 @@ class BoardwriteView(View):
             return JsonResponse({'message' : 'KeyError'}, status = 400)
         except json.JSONDecodeError:
             return JsonResponse({'message' : 'JSONDecodeError'}, status = 400)
+
+    def get_client_ip(self, request):
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip = x_forwarded_for.split(',')[0]
+        else:
+            ip = request.META.get('REMOTE_ADDR')
+        return ip
+
+class BoardrewriteView(View):
+    @login_required
+    def post(self, request):
+        try:
+            data              = json.loads(request.body)  
+            post_id           = data['post_id']         
+            title             = data['title']
+            content           = data['content'] 
+            password          = data['password']
+            tag_names         = data.get('tag_names')
+            ip_address        = self.get_client_ip(request)
+            # file            = request.FILES.get('filename') ## 파일 첨부는 추가 기능으로 구현
+
+            post              = Post.objects.get(id=post_id)
+
+            if not bcrypt.checkpw(password.encode('UTF-8'), post.password.encode('UTF-8')):
+                return JsonResponse({'message' : 'INVALID_POST_PASSWORD'}, status=401)
+
+            with transaction.atomic():
+                post.title      = title
+                post.content    = content
+                post.ip_address = ip_address
+                
+                post.save()
+
+                before_update_posttag = post.posttag_set.all()
+                before_update_posttag.delete() if before_update_posttag else None
+
+                if tag_names:
+                    for tag_name in tag_names.replace(" ","").split(','):
+                        tag, is_created = Tag.objects.get_or_create(
+                            name=tag_name
+                        )
+                        post_tag = PostTag(
+                            post_id = post.id,
+                            tag_id  = tag.id 
+                        )        
+                        post_tag.save()
+
+            return JsonResponse({'message' : 'SUCCESS'}, status=200)
+
+        except KeyError:
+            return JsonResponse({'message' : 'KeyError'}, status = 400)
+        except json.JSONDecodeError:
+            return JsonResponse({'message' : 'JSONDecodeError'}, status = 400)
+        except Post.DoesNotExist:
+            return JsonResponse({'message' : 'INVALID_POST_ID'}, status=401)
 
     def get_client_ip(self, request):
         x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
