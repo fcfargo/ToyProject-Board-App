@@ -52,7 +52,7 @@ __pycache__/
 *$py.class
 *.csv
 my_settings.py
-
+data.py
 # C extensions
 *.so
 

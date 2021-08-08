@@ -22,7 +22,7 @@ class Post(models.Model):
     views          = models.IntegerField(default=0)
     ip_address     = models.GenericIPAddressField(default='192.168.0.1')
     password       = models.CharField(max_length=200)
-    group_id       = models.BigIntegerField()
+    group_id       = models.BigIntegerField(null=True)
     group_order    = models.IntegerField(default=0)
     group_depth    = models.IntegerField(default=0)
     tag            = models.ManyToManyField('Tag', through='PostTag')
