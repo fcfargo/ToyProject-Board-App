@@ -1,9 +1,12 @@
 from django.urls    import path, include
 from .views         import (
-    BoardwriteView, BoardrewriteView
+    BoardWriteView, BoardRewriteView, BoardDeleteView,
+    BoardListView,
 )
 
 urlpatterns = [
-    path('/board-write', BoardwriteView.as_view()),
-    path('/board-rewrite', BoardrewriteView.as_view())
+    path('/board-write', BoardWriteView.as_view()),
+    path('/board-rewrite', BoardRewriteView.as_view()),
+    path('/board-delete', BoardDeleteView.as_view()),
+    path('/board-list', BoardListView.as_view()),
 ]
