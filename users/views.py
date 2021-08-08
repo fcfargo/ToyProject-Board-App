@@ -2,7 +2,6 @@ import jwt
 import bcrypt
 import json
 
-
 from django.http.response import JsonResponse
 from django.views         import View
 
@@ -53,7 +52,7 @@ class SignupView(View):
         except json.JSONDecodeError:
             return JsonResponse({'message' : 'JSONDecodeError'}, status = 400)
 
-class SigninpView(View):
+class SigninView(View):
     def post(self, request):
         try:
             data     = json.loads(request.body)
