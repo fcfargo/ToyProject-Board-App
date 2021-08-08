@@ -12,7 +12,7 @@ from users.models         import User
 from users.decorators     import login_required
 import my_settings
 
-class BoardwriteView(View):
+class BoardWriteView(View):
     @login_required
     def post(self, request):
         try:
@@ -67,7 +67,7 @@ class BoardwriteView(View):
             ip = request.META.get('REMOTE_ADDR')
         return ip
 
-class BoardrewriteView(View):
+class BoardRewriteView(View):
     @login_required
     def post(self, request):
         try:
@@ -77,7 +77,6 @@ class BoardrewriteView(View):
             content           = data['content'] 
             password          = data['password']
             tag_names         = data.get('tag_names')
-            ip_address        = self.get_client_ip(request)
             # file            = request.FILES.get('filename') ## 파일 첨부는 추가 기능으로 구현
 
             post              = Post.objects.get(id=post_id)
@@ -88,7 +87,6 @@ class BoardrewriteView(View):
             with transaction.atomic():
                 post.title      = title
                 post.content    = content
-                post.ip_address = ip_address
                 
                 post.save()
 
@@ -115,10 +113,26 @@ class BoardrewriteView(View):
         except Post.DoesNotExist:
             return JsonResponse({'message' : 'INVALID_POST_ID'}, status=401)
 
-    def get_client_ip(self, request):
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        if x_forwarded_for:
-            ip = x_forwarded_for.split(',')[0]
-        else:
-            ip = request.META.get('REMOTE_ADDR')
-        return ip
+class BoardDeleteView(View):
+    @login_required
+    def post(self, request):
+        try:
+            data     = json.loads(request.body)
+            post_id  = data['post_id']
+            password = data['password']
+
+            post     = Post.objects.get(id=post_id)
+
+            if not bcrypt.checkpw(password.encode('UTF-8'), post.password.encode('UTF-8')):
+                return JsonResponse({'message' : 'INVALID_POST_PASSWORD'}, status=401)
+            
+            post.delete()
+        
+            return JsonResponse({'message' : 'SUCCESS'}, status=200)
+            
+        except KeyError:
+            return JsonResponse({'message' : 'KeyError'}, status = 400)
+        except json.JSONDecodeError:
+            return JsonResponse({'message' : 'JSONDecodeError'}, status = 400)
+        except Post.DoesNotExist:
+            return JsonResponse({'message' : 'INVALID_POST_ID'}, status=401)
