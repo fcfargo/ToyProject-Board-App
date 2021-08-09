@@ -3,6 +3,7 @@ import json
 
 from django.http.response import JsonResponse
 from django.db            import transaction
+from django.db.models     import Case, When, Value
 from django.views         import View
 
 from .models              import (
@@ -135,4 +136,35 @@ class BoardDeleteView(View):
         except json.JSONDecodeError:
             return JsonResponse({'message' : 'JSONDecodeError'}, status = 400)
         except Post.DoesNotExist:
+
             return JsonResponse({'message' : 'INVALID_POST_ID'}, status=401)
+
+class BoardListView(View):
+    def get(self, request):
+        # 정렬: 내림차순, 공지 게시글 항상 위
+        # 페이지 당 15개씩 - > 페이지 정보 쿼리스트링으로 받아야 함
+        page_num  = int(request.GET.get('page', 1))
+        limit     = 15
+        start     = (page_num-1) * limit
+        end       = page_num     * limit
+
+        post_type_ordering = Case(When(
+            post_category_id=3, then=1),
+            default=2
+        )
+        
+        post_list = Post.objects.all().annotate(ordering=post_type_ordering).order_by(
+            'ordering',
+            '-group_id'
+        )[start:end] 
+
+        result    = [{
+            'id'            : post.id,
+            'title'         : post.title,
+            'post_category' : post.post_category.name,
+            'writer'        : post.user.nickname,
+            'final_updated' : post.updated_at,
+            'views'         : post.views
+        } for post in post_list]
+
+        return JsonResponse({'reuslt' : result}, status=200)
