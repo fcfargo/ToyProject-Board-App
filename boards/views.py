@@ -136,13 +136,13 @@ class BoardDeleteView(View):
         except json.JSONDecodeError:
             return JsonResponse({'message' : 'JSONDecodeError'}, status = 400)
         except Post.DoesNotExist:
-
             return JsonResponse({'message' : 'INVALID_POST_ID'}, status=401)
 
 class BoardListView(View):
     def get(self, request):
         # 정렬: 내림차순, 공지 게시글 항상 위
-        # 페이지 당 15개씩 - > 페이지 정보 쿼리스트링으로 받아야 함
+        # 페이지 당 15개씩 가져오기
+        # 답글 정렬은 추가 기능 예정
         page_num  = int(request.GET.get('page', 1))
         limit     = 15
         start     = (page_num-1) * limit
