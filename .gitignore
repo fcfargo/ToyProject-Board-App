@@ -53,6 +53,7 @@ __pycache__/
 *.csv
 my_settings.py
 data.py
+seed_users.py
 # C extensions
 *.so
 
