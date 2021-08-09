@@ -1,5 +1,6 @@
 import bcrypt
 import json
+from datetime             import datetime
 
 from django.http.response import JsonResponse
 from django.db            import transaction
@@ -167,4 +168,31 @@ class BoardListView(View):
             'views'         : post.views
         } for post in post_list]
 
-        return JsonResponse({'reuslt' : result}, status=200)
+        return JsonResponse({'result' : result}, status=200)
+
+class BoardDetailView(View):
+    def get(self, request, post_id=None):
+        try:
+            if not post_id:
+                return JsonResponse({'message' : "ENTER post_id"}, status=400)
+
+            post      = Post.objects.select_related('post_category', 'user').prefetch_related('posttag_set').get(id=post_id)
+            
+            # views 업데이트 쿼리
+            post.views += 1
+            post.save()
+
+            post_info =[{
+                "post_category" : post.post_category.name,
+                "writer"        : post.user.nickname,
+                "title"         : post.title,
+                "content"       : post.content,
+                "ip_address"    : post.ip_address,
+                "tag"           : [obj.tag.name for obj in post.posttag_set.all()] if post.posttag_set.all() else None,
+                "updated_at"    : post.updated_at.strftime('%Y-%m-%d %H:%M:%S')
+            }]
+
+            return JsonResponse({'result' : post_info}, status=200)
+
+        except Post.DoesNotExist:
+            return JsonResponse({'message' : 'INVALID_POST_ID'}, status=401)

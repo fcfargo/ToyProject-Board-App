@@ -1,7 +1,7 @@
 from django.urls    import path, include
 from .views         import (
     BoardWriteView, BoardRewriteView, BoardDeleteView,
-    BoardListView,
+    BoardListView, BoardDetailView
 )
 
 urlpatterns = [
@@ -9,4 +9,5 @@ urlpatterns = [
     path('/board-rewrite', BoardRewriteView.as_view()),
     path('/board-delete', BoardDeleteView.as_view()),
     path('/board-list', BoardListView.as_view()),
+    path('/<int:post_id>', BoardDetailView.as_view()),
 ]
