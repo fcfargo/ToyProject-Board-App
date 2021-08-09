@@ -136,6 +136,7 @@ class BoardDeleteView(View):
         except json.JSONDecodeError:
             return JsonResponse({'message' : 'JSONDecodeError'}, status = 400)
         except Post.DoesNotExist:
+
             return JsonResponse({'message' : 'INVALID_POST_ID'}, status=401)
 
 class BoardListView(View):
