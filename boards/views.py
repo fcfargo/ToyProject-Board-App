@@ -144,7 +144,6 @@ class BoardListView(View):
     def get(self, request):
         # 정렬: 내림차순, 공지 게시글 항상 위
         # 페이지 당 15개씩 가져오기
-        # 답글 정렬은 추가 기능 예정
         page_num  = int(request.GET.get('page', 1))
         limit     = 15
         start     = (page_num-1) * limit
@@ -157,7 +156,8 @@ class BoardListView(View):
         
         post_list = Post.objects.all().annotate(ordering=post_type_ordering).order_by(
             'ordering',
-            '-group_id'
+            '-group_id',
+            'group_order'
         )[start:end] 
 
         result    = [{
@@ -165,8 +165,11 @@ class BoardListView(View):
             'title'         : post.title,
             'post_category' : post.post_category.name,
             'writer'        : post.user.nickname,
-            'final_updated' : post.updated_at,
-            'views'         : post.views
+            'final_updated' : post.updated_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'views'         : post.views,
+            'group_id'      : post.group_id,
+            'group_order'   : post.group_order,
+            'group_depth'   : post.group_depth
         } for post in post_list]
 
         return JsonResponse({'result' : result}, status=200)
@@ -177,10 +180,10 @@ class BoardDetailView(View):
             if not post_id:
                 return JsonResponse({'message' : "ENTER post_id"}, status=400)
 
-            post      = Post.objects.select_related('post_category', 'user').prefetch_related('posttag_set').get(id=post_id)
+            post       = Post.objects.select_related('post_category', 'user').prefetch_related('posttag_set').get(id=post_id)
             
             # views 업데이트 쿼리
-            post.views += 1
+            post.views = F('views')+1
             post.save()
 
             post_info =[{
