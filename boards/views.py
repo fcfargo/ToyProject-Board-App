@@ -6,6 +6,7 @@ from django.http.response import JsonResponse
 from django.db            import transaction
 from django.db.models     import Case, When, Value
 from django.views         import View
+from django.db.models     import F
 
 from .models              import (
     Post, Tag, PostTag
@@ -196,3 +197,76 @@ class BoardDetailView(View):
 
         except Post.DoesNotExist:
             return JsonResponse({'message' : 'INVALID_POST_ID'}, status=401)
+
+class BoardReplyView(View):
+    @login_required
+    def post(self, request):
+        try:
+            data              = json.loads(request.body)  
+            post_id           = data['post_id']         
+            title             = data['title']
+            content           = data['content'] 
+            password          = data['password']
+            tag_names         = data.get('tag_names')
+            ip_address        = self.get_client_ip(request)
+            post_category_id  = 2
+            # file            = request.FILES.get('filename') ## 파일 첨부는 추가 기능으로 구현
+
+            mother_post       = Post.objects.get(id=post_id)
+
+            child_post_list   = Post.objects.filter(
+                group_id=mother_post.group_id, group_order__gt=mother_post.group_order 
+            )
+            
+            with transaction.atomic():
+                current_post = Post(
+                    board_category_id = mother_post.board_category.id,
+                    user_id           = request.user.id,
+                    post_category_id  = post_category_id,
+                    title             = title,
+                    content           = content,
+                    ip_address        = ip_address,
+                    password          = bcrypt.hashpw(password.encode('UTF-8'), bcrypt.gensalt()).decode('UTF-8'),
+                    group_id          = mother_post.group_id
+                )
+                current_post.save()
+
+                if tag_names:        
+                    for tag_name in tag_names.replace(" ","").split(','):
+                        tag, is_created = Tag.objects.get_or_create(
+                            name=tag_name
+                        )
+                        post_tag = PostTag(
+                            post_id = current_post.id,
+                            tag_id  = tag.id 
+                        )
+                        post_tag.save()
+
+                # child_post_list의 group_order와 group_depth 업데이트
+                if child_post_list:
+                    child_post_list.update(
+                        group_order=F('group_order')+1, 
+                    ) 
+
+                # current_post의 group_order와 group_depth 업데이트
+                current_post.group_order = mother_post.group_order+1
+                current_post.group_depth = mother_post.group_order+1
+                
+                current_post.save()
+
+            return JsonResponse({'message' : 'SUCCESS'}, status=200)
+
+        except KeyError:
+            return JsonResponse({'message' : 'KeyError'}, status = 400)
+        except json.JSONDecodeError:
+            return JsonResponse({'message' : 'JSONDecodeError'}, status = 400)
+        except Post.DoesNotExist:
+            return JsonResponse({'message' : 'INVALID_POST_ID'}, status=401)
+
+    def get_client_ip(self, request):
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip = x_forwarded_for.split(',')[0]
+        else:
+            ip = request.META.get('REMOTE_ADDR')
+        return ip
