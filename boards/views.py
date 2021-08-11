@@ -13,6 +13,7 @@ from .models              import (
 )
 from users.models         import User
 from users.decorators     import login_required
+from .modules             import get_client_ip
 import my_settings
 
 class BoardWriteView(View):
@@ -26,7 +27,7 @@ class BoardWriteView(View):
             content           = data['content'] 
             password          = data['password']
             tag_names         = data.get('tag_names')
-            ip_address        = self.get_client_ip(request)
+            ip_address        = get_client_ip(self, request)
             # file              = request.FILES.get('filename') ## 파일 첨부는 추가 기능으로 구현
 
             with transaction.atomic():
@@ -61,14 +62,6 @@ class BoardWriteView(View):
             return JsonResponse({'message' : 'KeyError'}, status = 400)
         except json.JSONDecodeError:
             return JsonResponse({'message' : 'JSONDecodeError'}, status = 400)
-
-    def get_client_ip(self, request):
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        if x_forwarded_for:
-            ip = x_forwarded_for.split(',')[0]
-        else:
-            ip = request.META.get('REMOTE_ADDR')
-        return ip
 
 class BoardRewriteView(View):
     @login_required
@@ -211,7 +204,7 @@ class BoardReplyView(View):
             content           = data['content'] 
             password          = data['password']
             tag_names         = data.get('tag_names')
-            ip_address        = self.get_client_ip(request)
+            ip_address        = get_client_ip(self,request)
             post_category_id  = 2
             # file            = request.FILES.get('filename') ## 파일 첨부는 추가 기능으로 구현
 
@@ -265,11 +258,3 @@ class BoardReplyView(View):
             return JsonResponse({'message' : 'JSONDecodeError'}, status = 400)
         except Post.DoesNotExist:
             return JsonResponse({'message' : 'INVALID_POST_ID'}, status=401)
-
-    def get_client_ip(self, request):
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        if x_forwarded_for:
-            ip = x_forwarded_for.split(',')[0]
-        else:
-            ip = request.META.get('REMOTE_ADDR')
-        return ip
