@@ -8,9 +8,8 @@ from django.db.models     import Case, When, Value
 from django.views         import View
 from django.db.models     import F
 
-from .models              import (
-    Post, Tag, PostTag
-)
+from .models              import Post
+
 from users.models         import User
 from users.decorators     import login_required
 from .modules             import get_client_ip
@@ -38,20 +37,10 @@ class BoardWriteView(View):
                     title             = title,
                     content           = content,
                     ip_address        = ip_address,
-                    password          = bcrypt.hashpw(password.encode('UTF-8'), bcrypt.gensalt()).decode('UTF-8')
+                    password          = bcrypt.hashpw(password.encode('UTF-8'), bcrypt.gensalt()).decode('UTF-8'),
+                    tag               = tag_names 
                 )
                 post.save()
-
-                if tag_names:        
-                    for tag_name in tag_names.replace(" ","").split(','):
-                        tag, is_created = Tag.objects.get_or_create(
-                            name=tag_name
-                        )
-                        post_tag = PostTag(
-                            post_id = post.id,
-                            tag_id  = tag.id 
-                        )
-                        post_tag.save()
 
                 post.group_id = post.id
                 post.save()
@@ -80,25 +69,11 @@ class BoardRewriteView(View):
             if not bcrypt.checkpw(password.encode('UTF-8'), post.password.encode('UTF-8')):
                 return JsonResponse({'message' : 'INVALID_POST_PASSWORD'}, status=401)
 
-            with transaction.atomic():
-                post.title      = title
-                post.content    = content
-                
-                post.save()
-
-                before_update_posttag = post.posttag_set.all()
-                before_update_posttag.delete() if before_update_posttag else None
-
-                if tag_names:
-                    for tag_name in tag_names.replace(" ","").split(','):
-                        tag, is_created = Tag.objects.get_or_create(
-                            name=tag_name
-                        )
-                        post_tag = PostTag(
-                            post_id = post.id,
-                            tag_id  = tag.id 
-                        )        
-                        post_tag.save()
+            post.title      = title
+            post.content    = content
+            post.tag        = tag_names
+            
+            post.save()
 
             return JsonResponse({'message' : 'SUCCESS'}, status=200)
 
@@ -173,7 +148,7 @@ class BoardDetailView(View):
             if not post_id:
                 return JsonResponse({'message' : "ENTER post_id"}, status=400)
 
-            post       = Post.objects.select_related('post_category', 'user').prefetch_related('posttag_set').get(id=post_id)
+            post       = Post.objects.select_related('post_category', 'user').prefetch_related('fileupload_set').get(id=post_id)
             
             # views 업데이트 쿼리
             post.views = F('views')+1
@@ -185,7 +160,7 @@ class BoardDetailView(View):
                 "title"         : post.title,
                 "content"       : post.content,
                 "ip_address"    : post.ip_address,
-                "tag"           : [obj.tag.name for obj in post.posttag_set.all()] if post.posttag_set.all() else None,
+                "tag"           : post.tag.replace(" ", "").split(','),
                 "updated_at"    : post.updated_at.strftime('%Y-%m-%d %H:%M:%S')
             }]
 
@@ -223,20 +198,10 @@ class BoardReplyView(View):
                     content           = content,
                     ip_address        = ip_address,
                     password          = bcrypt.hashpw(password.encode('UTF-8'), bcrypt.gensalt()).decode('UTF-8'),
-                    group_id          = mother_post.group_id
+                    group_id          = mother_post.group_id,
+                    tag               = tag_names
                 )
                 current_post.save()
-
-                if tag_names:        
-                    for tag_name in tag_names.replace(" ","").split(','):
-                        tag, is_created = Tag.objects.get_or_create(
-                            name=tag_name
-                        )
-                        post_tag = PostTag(
-                            post_id = current_post.id,
-                            tag_id  = tag.id 
-                        )
-                        post_tag.save()
 
                 # child_post_list의 group_order와 group_depth 업데이트
                 if child_post_list:

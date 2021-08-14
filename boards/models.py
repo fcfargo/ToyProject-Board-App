@@ -25,7 +25,7 @@ class Post(models.Model):
     group_id       = models.BigIntegerField(null=True)
     group_order    = models.IntegerField(default=0)
     group_depth    = models.IntegerField(default=0)
-    tag            = models.ManyToManyField('Tag', through='PostTag')
+    tag            = models.CharField(max_length=200, null=True)
     created_at     = models.DateTimeField(auto_now_add=True)
     updated_at     = models.DateTimeField(auto_now=True)
     
@@ -39,16 +39,3 @@ class FileUpload(models.Model):
     
     class Meta:
         db_table = 'file_uploads'
-
-class PostTag(models.Model):
-    post         = models.ForeignKey('Post', on_delete=models.CASCADE)
-    tag          = models.ForeignKey('Tag', on_delete=models.CASCADE)
-    
-    class Meta:
-        db_table = 'post_tags'
-
-class Tag(models.Model):
-    name         = models.CharField(max_length=30)
-    
-    class Meta:
-        db_table = 'tags'
