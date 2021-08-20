@@ -1,3 +1,4 @@
+import boto3
 import bcrypt
 import json
 from datetime             import datetime
@@ -8,18 +9,18 @@ from django.db.models     import Case, When, Value
 from django.views         import View
 from django.db.models     import F
 
-from .models              import Post
+from .models              import Post, FileUpload
 
 from users.models         import User
 from users.decorators     import login_required
-from .modules             import get_client_ip
+from .modules             import get_client_ip, create_s3_client
 import my_settings
 
 class BoardWriteView(View):
     @login_required
     def post(self, request):
         try:
-            data              = json.loads(request.body)           
+            data              = json.loads(request.POST.get('json'))           
             board_category_id = data['board_category_id']
             post_category_id  = data['post_category_id']
             title             = data['title']
@@ -27,7 +28,26 @@ class BoardWriteView(View):
             password          = data['password']
             tag_names         = data.get('tag_names')
             ip_address        = get_client_ip(self, request)
-            # file              = request.FILES.get('filename') ## 파일 첨부는 추가 기능으로 구현
+            files             = request.FILES.getlist('filename')
+
+            if files:
+                s3_client     = create_s3_client()
+                bucket_name   = my_settings.BUCKET_NAME                   # AWS s3 버킷 이름
+                aws_region    = my_settings.AWS_REGION                    # AWS s3 리전 
+                file_urls     = []
+
+                for file in files:
+                    s3_client.upload_fileobj(                                
+                        file,
+                        bucket_name,
+                        'board_file/' + file.name,
+                        ExtraArgs={
+                            "ContentType": file.content_type
+                        }
+                    )
+                    file_endpoint = file.name.replace(" ", "")
+                    file_url = f'https://{bucket_name}.s3.{aws_region}.amazonaws.com/board_file/{file_endpoint}'
+                    file_urls.append(file_url)
 
             with transaction.atomic():
                 post = Post(
@@ -44,7 +64,15 @@ class BoardWriteView(View):
 
                 post.group_id = post.id
                 post.save()
-  
+
+                if files:
+                    for file_url in file_urls:
+                        fileupload = FileUpload(
+                            post_id           = post.id,
+                            path              = file_url
+                        )
+                        fileupload.save()
+
             return JsonResponse({'message' : 'SUCCESS'}, status=200)
 
         except KeyError:
@@ -56,24 +84,68 @@ class BoardRewriteView(View):
     @login_required
     def post(self, request):
         try:
-            data              = json.loads(request.body)  
-            post_id           = data['post_id']         
-            title             = data['title']
-            content           = data['content'] 
-            password          = data['password']
-            tag_names         = data.get('tag_names')
-            # file            = request.FILES.get('filename') ## 파일 첨부는 추가 기능으로 구현
+            data                = json.loads(request.POST.get('json'))  
+            post_id             = data['post_id']         
+            title               = data['title']
+            content             = data['content'] 
+            password            = data['password']
+            tag_names           = data.get('tag_names')
+            files               = request.FILES.getlist('filename')
 
-            post              = Post.objects.get(id=post_id)
+            post                = Post.objects.get(id=post_id)
+
+            fileupload_list     = post.fileupload_set.all()
 
             if not bcrypt.checkpw(password.encode('UTF-8'), post.password.encode('UTF-8')):
                 return JsonResponse({'message' : 'INVALID_POST_PASSWORD'}, status=401)
 
-            post.title      = title
-            post.content    = content
-            post.tag        = tag_names
-            
-            post.save()
+            if fileupload_list:
+                s3_client       = create_s3_client()
+                bucket_name     = my_settings.BUCKET_NAME                   # AWS s3 버킷 이름
+                aws_region      = my_settings.AWS_REGION                    # AWS s3 리전 
+
+                for obj in fileupload_list:
+                    s3_client.delete_object(
+                        Bucket  = bucket_name,
+                        Key     = str(obj.path).split('amazonaws.com/')[-1]
+                    )
+
+            if files:
+                s3_client         = create_s3_client()
+                bucket_name       = my_settings.BUCKET_NAME
+                aws_region        = my_settings.AWS_REGION
+                file_urls         = []
+
+                for file in files:
+                    s3_client.upload_fileobj(                                
+                        file,
+                        bucket_name,
+                        'board_file/' + file.name,
+                        ExtraArgs={
+                            "ContentType": file.content_type
+                        }
+                    )
+
+                    file_endpoint = file.name.replace(" ", "")
+                    file_url = f'https://{bucket_name}.s3.{aws_region}.amazonaws.com/board_file/{file_endpoint}'
+                    file_urls.append(file_url)
+
+            with transaction.atomic():
+                fileupload_list.delete()
+
+                post.title      = title
+                post.content    = content
+                post.tag        = tag_names
+                                
+                post.save()
+
+                if files:
+                    for file_url in file_urls:
+                        fileupload = FileUpload(
+                            post_id           = post.id,
+                            path              = file_url
+                        )
+                        fileupload.save()
 
             return JsonResponse({'message' : 'SUCCESS'}, status=200)
 
@@ -94,8 +166,21 @@ class BoardDeleteView(View):
 
             post     = Post.objects.get(id=post_id)
 
+            fileupload_list     = post.fileupload_set.all()
+
             if not bcrypt.checkpw(password.encode('UTF-8'), post.password.encode('UTF-8')):
                 return JsonResponse({'message' : 'INVALID_POST_PASSWORD'}, status=401)
+
+            if fileupload_list:
+                s3_client       = create_s3_client()
+                bucket_name     = my_settings.BUCKET_NAME                   # AWS s3 버킷 이름
+                aws_region      = my_settings.AWS_REGION                    # AWS s3 리전 
+
+                for obj in fileupload_list:
+                    s3_client.delete_object(
+                        Bucket  = bucket_name,
+                        Key     = str(obj.path).split('amazonaws.com/')[-1]
+                    )
             
             post.delete()
         
@@ -112,35 +197,38 @@ class BoardListView(View):
     def get(self, request):
         # 정렬: 내림차순, 공지 게시글 항상 위
         # 페이지 당 15개씩 가져오기
-        page_num  = int(request.GET.get('page', 1))
-        limit     = 15
-        start     = (page_num-1) * limit
-        end       = page_num     * limit
+        try:
+            page_num  = int(request.GET.get('page', 1))
+            limit     = 15
+            start     = (page_num-1) * limit
+            end       = page_num     * limit
 
-        post_type_ordering = Case(When(
-            post_category_id=3, then=1),
-            default=2
-        )
-        
-        post_list = Post.objects.all().annotate(ordering=post_type_ordering).order_by(
-            'ordering',
-            '-group_id',
-            'group_order'
-        )[start:end] 
+            post_type_ordering = Case(When(
+                post_category_id=3, then=1),
+                default=2
+            )
+            
+            post_list = Post.objects.all().annotate(ordering=post_type_ordering).order_by(
+                'ordering',
+                '-group_id',
+                'group_order'
+            )[start:end] 
 
-        result    = [{
-            'id'            : post.id,
-            'title'         : post.title,
-            'post_category' : post.post_category.name,
-            'writer'        : post.user.nickname,
-            'final_updated' : post.updated_at.strftime('%Y-%m-%d %H:%M:%S'),
-            'views'         : post.views,
-            'group_id'      : post.group_id,
-            'group_order'   : post.group_order,
-            'group_depth'   : post.group_depth
-        } for post in post_list]
+            result    = [{
+                'id'            : post.id,
+                'title'         : post.title,
+                'post_category' : post.post_category.name,
+                'writer'        : post.user.nickname,
+                'final_updated' : post.updated_at.strftime('%Y-%m-%d %H:%M:%S'),
+                'views'         : post.views,
+                'group_id'      : post.group_id,
+                'group_order'   : post.group_order,
+                'group_depth'   : post.group_depth
+            } for post in post_list]
 
-        return JsonResponse({'result' : result}, status=200)
+            return JsonResponse({'result' : result}, status=200)
+        except ValueError:
+            return JsonResponse({'message' : "ENTER page_number"}, status=400)
 
 class BoardDetailView(View):
     def get(self, request, post_id=None):
@@ -160,8 +248,9 @@ class BoardDetailView(View):
                 "title"         : post.title,
                 "content"       : post.content,
                 "ip_address"    : post.ip_address,
-                "tag"           : post.tag.replace(" ", "").split(','),
-                "updated_at"    : post.updated_at.strftime('%Y-%m-%d %H:%M:%S')
+                "tag"           : post.tag.replace(" ", "").split(',') if post.tag else None,
+                "updated_at"    : post.updated_at.strftime('%Y-%m-%d %H:%M:%S'),
+                "file_uploads"  : [str(obj.path).split('/board_file/')[-1] for obj in post.fileupload_set.all()] if post.fileupload_set.all() else None
             }]
 
             return JsonResponse({'result' : post_info}, status=200)
@@ -173,7 +262,7 @@ class BoardReplyView(View):
     @login_required
     def post(self, request):
         try:
-            data              = json.loads(request.body)  
+            data              = json.loads(request.POST.get('json'))
             post_id           = data['post_id']         
             title             = data['title']
             content           = data['content'] 
@@ -181,13 +270,32 @@ class BoardReplyView(View):
             tag_names         = data.get('tag_names')
             ip_address        = get_client_ip(self,request)
             post_category_id  = 2
-            # file            = request.FILES.get('filename') ## 파일 첨부는 추가 기능으로 구현
+            files             = request.FILES.getlist('filename')
 
             mother_post       = Post.objects.get(id=post_id)
 
             child_post_list   = Post.objects.filter(
                 group_id=mother_post.group_id, group_order__gt=mother_post.group_order 
             )
+
+            if files:
+                s3_client     = create_s3_client()
+                bucket_name   = my_settings.BUCKET_NAME                   # AWS s3 버킷 이름
+                aws_region    = my_settings.AWS_REGION                    # AWS s3 리전 
+                file_urls     = []
+
+                for file in files:
+                    s3_client.upload_fileobj(                                
+                        file,
+                        bucket_name,
+                        'board_file/' + file.name,
+                        ExtraArgs={
+                            "ContentType": file.content_type
+                        }
+                    )
+                    file_endpoint = file.name.replace(" ", "")
+                    file_url = f'https://{bucket_name}.s3.{aws_region}.amazonaws.com/board_file/{file_endpoint}'
+                    file_urls.append(file_url)
             
             with transaction.atomic():
                 current_post = Post(
@@ -214,6 +322,15 @@ class BoardReplyView(View):
                 current_post.group_depth = mother_post.group_order+1
                 
                 current_post.save()
+
+                # 파일 URL 저장
+                if files:
+                    for file_url in file_urls:
+                        fileupload = FileUpload(
+                            post_id           = current_post.id,
+                            path              = file_url
+                        )
+                        fileupload.save()               
 
             return JsonResponse({'message' : 'SUCCESS'}, status=200)
 
