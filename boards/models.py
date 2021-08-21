@@ -34,8 +34,7 @@ class Post(models.Model):
 
 class FileUpload(models.Model):
     post          = models.ForeignKey('Post', on_delete=models.CASCADE)
-    title         = models.CharField(max_length=500)
-    path          = models.FileField(upload_to='media/', null=True)
+    path          = models.FileField(max_length=200, null=True)
     
     class Meta:
         db_table = 'file_uploads'

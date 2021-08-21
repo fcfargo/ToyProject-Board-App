@@ -1,13 +1,16 @@
+from os import path
 import unittest
 import bcrypt
 import jwt
 import json
 
 from django.test   import Client, TestCase
+from unittest.mock import MagicMock, patch
 
 from users.models  import User
 from .models       import (
-    BoardCategory, Post, PostCategory
+    BoardCategory, Post, PostCategory,
+    FileUpload
 )    
 import my_settings
 
@@ -17,6 +20,7 @@ class BoardWriteTest(TestCase):
         hashed_password   = bcrypt.hashpw(
                 password.encode('UTF-8'), bcrypt.gensalt()
             ).decode('UTF-8')
+            
         User.objects.create(
             id            = 1,
             name          = 'fcfargo',
@@ -55,8 +59,7 @@ class BoardWriteTest(TestCase):
             "tag_names": "배송날짜, 배송문의"
         }
 
-        response = c.post('/boards/board-write', json.dumps(body), content_type='applications/json', **header)
-
+        response = c.post('/boards/board-write', {"json":json.dumps(body)}, **header) 
         self.assertContains(response=response, text='KeyError', status_code=400)
 
     def test_board_write_json_decodeError(self):
@@ -73,11 +76,17 @@ class BoardWriteTest(TestCase):
             "tag_names": "배송날짜, 배송문의",
         }
 
-        response = c.post('/boards/board-write', body, content_type='applications/json', **header)
-
+        response = c.post('/boards/board-write', {"json":body}, **header)
         self.assertContains(response=response, text='JSONDecodeError', status_code=400)
 
-    def test_board_write_success(self):
+    @patch('boards.views.create_s3_client')
+    def test_board_write_success(self, mocked_s3_client):
+        class FakeResponse:
+            def json(self):
+                return None
+
+        mocked_s3_client.upload_fileobj = MagicMock(return_value = FakeResponse())
+
         c        = Client()
         user     = User.objects.filter(name='fcfargo').first()
         token    = jwt.encode({"user_id" : user.id}, my_settings.SECRET['secret'], algorithm="HS256")
@@ -91,7 +100,9 @@ class BoardWriteTest(TestCase):
             "tag_names": "배송날짜, 배송문의",
         }
 
-        response = c.post('/boards/board-write', json.dumps(body), content_type='applications/json', **header)
+        with open('/Users/younghun/Downloads/IMG_1749.JPG', 'rb') as myfile1, open('/Users/younghun/Downloads/얼평.jpeg', 'rb') as myfile2 :
+            response = c.post('/boards/board-write', {"json":json.dumps(body), "filename": [myfile1, myfile2]}, **header)     
+        print('file_uploads_object_count_write :', FileUpload.objects.count())
 
         self.assertContains(response=response, text='SUCCESS', status_code=200)
 
@@ -141,6 +152,38 @@ class BoardRewriteTest(TestCase):
         BoardCategory.objects.all().delete()
         PostCategory.objects.all().delete()
 
+    def test_board_rewrite_key_error(self):
+        c        = Client()
+        user     = User.objects.filter(name='fcfargo').first()
+        token    = jwt.encode({"user_id" : user.id}, my_settings.SECRET['secret'], algorithm="HS256")
+        header   = {'HTTP_Authorization' : token} 
+        body     = {
+            "post_id": 1,
+            # "title": "문의 드립니다. real 문의",
+            "content": "상품 배송 예정일은 언제인가요????????",
+            "password": "gns7201ok!",
+            "tag_names": "배송날짜, 배송문의, 재입고문의"
+        }
+
+        response = c.post('/boards/board-rewrite', {"json":json.dumps(body)}, **header) 
+        self.assertContains(response=response, text='KeyError', status_code=400)
+
+    def test_board_rewrite_json_decodeError(self):
+        c        = Client()
+        user     = User.objects.filter(name='fcfargo').first()
+        token    = jwt.encode({"user_id" : user.id}, my_settings.SECRET['secret'], algorithm="HS256")
+        header   = {'HTTP_Authorization' : token} 
+        body     = {
+            "post_id": 1,
+            "title": "문의 드립니다. real 문의",
+            "content": "상품 배송 예정일은 언제인가요????????",
+            "password": "gns7201ok!",
+            "tag_names": "배송날짜, 배송문의, 재입고문의"
+        }
+
+        response = c.post('/boards/board-rewrite', {"json":body}, **header)
+        self.assertContains(response=response, text='JSONDecodeError', status_code=400)
+
     def test_board_rewrite_invalid_password_error(self):
         c        = Client()
         user     = User.objects.filter(name='fcfargo').first()
@@ -154,8 +197,7 @@ class BoardRewriteTest(TestCase):
             "tag_names": "배송날짜, 배송문의, 재입고문의"
         }
 
-        response = c.post('/boards/board-rewrite', json.dumps(body), content_type='applications/json', **header)
-
+        response = c.post('/boards/board-rewrite', {'json' : json.dumps(body)}, **header)
         self.assertContains(response=response, text='INVALID_POST_PASSWORD', status_code=401)
 
     def test_board_rewrite_invalid_post_id_error(self):
@@ -171,11 +213,17 @@ class BoardRewriteTest(TestCase):
             "tag_names": "배송날짜, 배송문의, 재입고문의"
         }
 
-        response = c.post('/boards/board-rewrite', json.dumps(body), content_type='applications/json', **header)
-
+        response = c.post('/boards/board-rewrite', {'json' : json.dumps(body)}, **header)
         self.assertContains(response=response, text='INVALID_POST_ID', status_code=401)
 
-    def test_board_rewrite_success(self):
+    @patch('boards.views.create_s3_client')
+    def test_board_rewrite_success(self, mocked_s3_client):
+        class FakeResponse:
+            def json(self):
+                return None
+
+        mocked_s3_client.upload_fileobj = MagicMock(return_value = FakeResponse())
+
         c        = Client()
         user     = User.objects.filter(name='fcfargo').first()
         token    = jwt.encode({"user_id" : user.id}, my_settings.SECRET['secret'], algorithm="HS256")
@@ -188,7 +236,9 @@ class BoardRewriteTest(TestCase):
             "tag_names": "배송날짜, 배송문의, 재입고문의"
         }
 
-        response = c.post('/boards/board-rewrite', json.dumps(body), content_type='applications/json', **header)
+        with open('/Users/younghun/Downloads/IMG_1749.JPG', 'rb') as myfile1, open('/Users/younghun/Downloads/얼평.jpeg', 'rb') as myfile2 :
+            response = c.post('/boards/board-rewrite', {'json' : json.dumps(body), 'filename' : myfile1}, **header)
+        print('file_uploads_object_count_rewrite :', FileUpload.objects.count())
 
         self.assertContains(response=response, text='SUCCESS', status_code=200)
 
@@ -232,11 +282,43 @@ class BoardDeleteTest(TestCase):
             tag               = '배송날짜, 배송문의'
         )
 
+        FileUpload.objects.create(
+            post_id  = 1,
+            path     = 'picture.jpg'
+        )
+
     def tearDown(self):
         User.objects.filter(name='fcfargo').delete()
         Post.objects.all().delete()
         BoardCategory.objects.all().delete()
         PostCategory.objects.all().delete()
+        FileUpload.objects.all().delete()
+
+    def test_board_rewrite_key_error(self):
+        c        = Client()
+        user     = User.objects.filter(name='fcfargo').first()
+        token    = jwt.encode({"user_id" : user.id}, my_settings.SECRET['secret'], algorithm="HS256")
+        header   = {'HTTP_Authorization' : token} 
+        body     = {
+            # "post_id": 1,
+            "password": "gns7201ok!",
+        }
+
+        response = c.post('/boards/board-delete', json.dumps(body), content_type='applications/json', **header) 
+        self.assertContains(response=response, text='KeyError', status_code=400)
+
+    def test_board_rewrite_json_decodeError(self):
+        c        = Client()
+        user     = User.objects.filter(name='fcfargo').first()
+        token    = jwt.encode({"user_id" : user.id}, my_settings.SECRET['secret'], algorithm="HS256")
+        header   = {'HTTP_Authorization' : token} 
+        body     = {
+            "post_id": 1,
+            "password": "gns7201ok!",
+        }
+
+        response = c.post('/boards/board-delete', body, content_type='applications/json', **header)
+        self.assertContains(response=response, text='JSONDecodeError', status_code=400)
 
     def test_board_delete_invalid_password_error(self):
         c        = Client()
@@ -266,7 +348,14 @@ class BoardDeleteTest(TestCase):
 
         self.assertContains(response=response, text='INVALID_POST_ID', status_code=401)
 
-    def test_board_delete_success(self):
+    @patch('boards.views.create_s3_client')
+    def test_board_delete_success(self, mocked_s3_client):
+        class FakeResponse:
+            def json(self):
+                return None
+
+        mocked_s3_client.upload_fileobj = MagicMock(return_value = FakeResponse())
+
         c        = Client()
         user     = User.objects.filter(name='fcfargo').first()
         token    = jwt.encode({"user_id" : user.id}, my_settings.SECRET['secret'], algorithm="HS256")
@@ -277,6 +366,7 @@ class BoardDeleteTest(TestCase):
         }
 
         response = c.post('/boards/board-delete', json.dumps(body), content_type='applications/json', **header)
+        print('file_uploads_object_count_delete :', FileUpload.objects.count())
 
         if not Post.objects.filter(id=1).exists():
             self.assertContains(response=response, text='SUCCESS', status_code=200)
@@ -327,6 +417,18 @@ class BoardListTest(TestCase):
         BoardCategory.objects.all().delete()
         PostCategory.objects.all().delete()
 
+    def test_board_list_value_error(self):
+        c        = Client()
+        post     = Post.objects.filter(id=1).first()
+
+        param    = {
+            "page" : 'a'
+        }
+
+        response = c.get('/boards/board-list', param)
+
+        self.assertContains(response=response, text='ENTER page_number', status_code=400)
+
     def test_board_list_success(self):
         c        = Client()
         post     = Post.objects.filter(id=1).first()
@@ -335,7 +437,7 @@ class BoardListTest(TestCase):
             "page" : 1
         }
 
-        response = c.get('/boards/board-list', param, content_type='applications/json')
+        response = c.get('/boards/board-list', param)
 
         result = [{
             'id'            : post.id,
@@ -395,17 +497,22 @@ class BoardDetailTest(TestCase):
             group_id          = 1,
             tag               = '배송날짜, 배송문의'
         )
+        FileUpload.objects.create(
+            post_id  = 1,
+            path     = 'picture.jpg'
+        )
 
     def tearDown(self):
         User.objects.filter(name='fcfargo').delete()
         Post.objects.all().delete()
         BoardCategory.objects.all().delete()
         PostCategory.objects.all().delete()
+        FileUpload.objects.all().delete()
 
     def test_board_detail_invalid_post_id(self):
         c        = Client()
 
-        response = c.get('/boards/3', content_type='applications/json')
+        response = c.get('/boards/3')
 
         self.assertContains(response=response, text='INVALID_POST_ID', status_code=401)
 
@@ -413,7 +520,7 @@ class BoardDetailTest(TestCase):
         c        = Client()
         post     = Post.objects.filter(id=1).first()
 
-        response = c.get('/boards/1', content_type='applications/json')
+        response = c.get('/boards/1')
 
         post_info =[{
             "post_category" : post.post_category.name,
@@ -421,8 +528,9 @@ class BoardDetailTest(TestCase):
             "title"         : post.title,
             "content"       : post.content,
             "ip_address"    : post.ip_address,
-            "tag"           : post.tag.replace(" ", "").split(","),
-            "updated_at"    : post.updated_at.strftime('%Y-%m-%d %H:%M:%S')
+            "tag"           : post.tag.replace(" ", "").split(",") if post.tag else None,
+            "updated_at"    : post.updated_at.strftime('%Y-%m-%d %H:%M:%S'),
+            "file_uploads"  : [str(obj.path).split('/board_file/')[-1] for obj in post.fileupload_set.all()] if post.fileupload_set.all() else None
         }]
 
         self.assertEqual(response.status_code, 200)
@@ -491,14 +599,29 @@ class BoardReplyTest(TestCase):
         BoardCategory.objects.all().delete()
         PostCategory.objects.all().delete()
 
-    def test_board_detail_invalid_post_id(self):
+    def test_board_reply_invalid_post_id(self):
         c        = Client()
-
-        response = c.get('/boards/3', content_type='applications/json')
+        user     = User.objects.filter(name='fcfargo').first()
+        token    = jwt.encode({"user_id" : user.id}, my_settings.SECRET['secret'], algorithm="HS256")
+        header   = {'HTTP_Authorization' : token} 
+        body     = {
+            "post_id": 3,
+            "title": "가입 기념 쿠폰을 받고 싶은신가요",
+            "content": "가입 쿠폰은 프리미엄 회원에게만 지급됩니다. 이번 기회에 회원 등급을 업그레이드해보세요!",
+            "password": "gns7201ok!"
+        }
+        response = c.post('/boards/board-reply', {'json': json.dumps(body)}, **header)
 
         self.assertContains(response=response, text='INVALID_POST_ID', status_code=401)
 
-    def test_board_reply_success(self):
+    @patch('boards.views.create_s3_client')
+    def test_board_reply_success(self, mocked_s3_client):
+        class FakeResponse:
+            def json(self):
+                return None
+
+        mocked_s3_client.upload_fileobj = MagicMock(return_value = FakeResponse())
+
         c        = Client()
         user     = User.objects.filter(name='fcfargo').first()
         token    = jwt.encode({"user_id" : user.id}, my_settings.SECRET['secret'], algorithm="HS256")
@@ -509,10 +632,12 @@ class BoardReplyTest(TestCase):
             "content": "가입 쿠폰은 프리미엄 회원에게만 지급됩니다. 이번 기회에 회원 등급을 업그레이드해보세요!",
             "password": "gns7201ok!"
         }
-        response = c.post('/boards/board-reply', json.dumps(body), content_type='applications/json', **header)
+        with open('/Users/younghun/Downloads/IMG_1749.JPG', 'rb') as myfile1, open('/Users/younghun/Downloads/얼평.jpeg', 'rb') as myfile2 :
+            response = c.post('/boards/board-reply', {'json': json.dumps(body), 'filename':[myfile1, myfile2]}, **header)
         
+        print('file_uploads_object_count_reply :', FileUpload.objects.count())
         current_post = Post.objects.filter(id=3).first()
-        child_post   = Post.objects.filter(id=2).first()
+        child_post   = Post.objects.filter(id=2).first()      
 
         if current_post.group_order == child_post.group_order -1:
             self.assertContains(response=response, text='SUCCESS', status_code=200)
