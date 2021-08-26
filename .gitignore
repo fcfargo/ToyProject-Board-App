@@ -54,6 +54,10 @@ __pycache__/
 my_settings.py
 data.py
 seed_users.py
+Dockerfile
+requirements.txt
+board_dump.sql
+
 # C extensions
 *.so
 
