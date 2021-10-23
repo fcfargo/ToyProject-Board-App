@@ -318,7 +318,7 @@ class BoardReplyView(View):
                         group_order=F('group_order')+1, 
                     ) 
                     
-                # 객체로 인해 current_post가 child_post_list에 포함되어 group_order 값이 1 가산되는 것을 막기 위해 .save() .update() 이후에 배치했다.
+                # current_post가 child_post_list에 포함되어 group_order 값이 1 가산되는 것을 막기 위해 .save() .update() 이후에 배치했다.
                 current_post.save()
 
                 # 파일 URL 저장
