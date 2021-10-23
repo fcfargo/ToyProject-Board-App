@@ -307,20 +307,18 @@ class BoardReplyView(View):
                     ip_address        = ip_address,
                     password          = bcrypt.hashpw(password.encode('UTF-8'), bcrypt.gensalt()).decode('UTF-8'),
                     group_id          = mother_post.group_id,
+                    group_order       = mother_post.group_order+1, # current_post의 group_order 지정
+                    group_depth       = mother_post.group_depth+1, # current_post의 group_depth 지정
                     tag               = tag_names
                 )
-                current_post.save()
 
-                # child_post_list의 group_order와 group_depth 업데이트
+                # child_post_list의 group_order 업데이트
                 if child_post_list:
                     child_post_list.update(
                         group_order=F('group_order')+1, 
                     ) 
-
-                # current_post의 group_order와 group_depth 업데이트
-                current_post.group_order = mother_post.group_order+1
-                current_post.group_depth = mother_post.group_order+1
-                
+                    
+                # 객체로 인해 current_post가 child_post_list에 포함되어 group_order 값이 1 가산되는 것을 막기 위해 .save() .update() 이후에 배치했다.
                 current_post.save()
 
                 # 파일 URL 저장
