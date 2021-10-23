@@ -26,3 +26,4 @@
 - Docker
 - RDS
 - EC2
+- S3
