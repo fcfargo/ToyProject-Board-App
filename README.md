@@ -1,6 +1,6 @@
 # ToyProject-Board-App  📝🖊
 ## 🖥 Project Summary
-- 게시판(board)과 사용자(user) App을 구현했습니다.
+- 게시판(board)과 사용자(user) App을 구현했습니다!
 
 ## 👩🏻‍💻 Work Details
 - 다음과 같은 기능을 구현했습니다.
